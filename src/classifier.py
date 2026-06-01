@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 
+import joblib
+import numpy as np
 import pandas as pd
 from sklearn.metrics import classification_report
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import cross_val_score, StratifiedKFold, train_test_split
 from sklearn.preprocessing import LabelEncoder
 from xgboost import XGBClassifier
 
@@ -33,6 +36,8 @@ class TrainResults:
     feature_importances: pd.Series
     label_encoder: LabelEncoder
     test_accuracy: float
+    cv_accuracy_mean: float = 0.0
+    cv_accuracy_std: float = 0.0
 
 
 class WeldSignalClassifier:
@@ -66,8 +71,17 @@ class WeldSignalClassifier:
             pd.Series(self._model.feature_importances_, index=available)
             .sort_values(ascending=True)
         )
-        logger.info("Trained. Accuracy=%.3f", accuracy)
-        return TrainResults(report, importances, self._le, accuracy)
+
+        cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+        cv_scores = cross_val_score(self._model, X, y, cv=cv, scoring="accuracy", n_jobs=-1)
+        cv_mean = float(cv_scores.mean())
+        cv_std = float(cv_scores.std())
+
+        logger.info(
+            "Trained. Holdout accuracy=%.3f  CV accuracy=%.3f ± %.3f",
+            accuracy, cv_mean, cv_std,
+        )
+        return TrainResults(report, importances, self._le, accuracy, cv_mean, cv_std)
 
     def predict_with_explanation(self, row: pd.DataFrame) -> tuple[str, float, pd.DataFrame]:
         available = [c for c in self._feat_cols if c in row.columns]
@@ -89,3 +103,23 @@ class WeldSignalClassifier:
             "defect_type": list(self._le.classes_),
             "probability": proba,
         }).sort_values("probability", ascending=True)
+
+    def save(self, path: str | Path) -> None:
+        """Persist the trained classifier and label encoder to disk."""
+        if not self._trained:
+            raise RuntimeError("Nothing to save — call fit() first.")
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump({"model": self._model, "le": self._le, "feat_cols": self._feat_cols}, path)
+        logger.info("Classifier saved to %s", path)
+
+    @classmethod
+    def load(cls, path: str | Path) -> "WeldSignalClassifier":
+        """Load a previously saved classifier from disk."""
+        data = joblib.load(path)
+        obj = cls.__new__(cls)
+        obj._model = data["model"]
+        obj._le = data["le"]
+        obj._feat_cols = data["feat_cols"]
+        obj._trained = True
+        return obj
