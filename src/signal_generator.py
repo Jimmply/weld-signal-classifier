@@ -204,7 +204,9 @@ class WeldFleetSignalGenerator:
             feats[f"{col}_std"]       = float(s.std())
             feats[f"{col}_max"]       = float(s.max())
             feats[f"{col}_kurtosis"]  = float(s.kurtosis())
+            feats[f"{col}_skewness"]  = float(s.skew())
             feats[f"{col}_rms"]       = float(np.sqrt((s**2).mean()))
+            feats[f"{col}_p2p"]       = float(s.max() - s.min())
         feats["event_rate"]           = float(d["is_event"].mean())
         feats["n_events"]             = int(d["is_event"].sum())
         return feats

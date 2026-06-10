@@ -19,12 +19,15 @@ logger = logging.getLogger(__name__)
 FEAT_COLS = [
     c for c in [
         "photodiode_v_mean", "photodiode_v_std", "photodiode_v_max",
-        "photodiode_v_kurtosis", "photodiode_v_rms",
+        "photodiode_v_kurtosis", "photodiode_v_skewness", "photodiode_v_rms",
+        "photodiode_v_p2p",
         "acoustic_rms_mv_mean", "acoustic_rms_mv_std", "acoustic_rms_mv_max",
-        "acoustic_rms_mv_kurtosis", "acoustic_rms_mv_rms",
+        "acoustic_rms_mv_kurtosis", "acoustic_rms_mv_skewness", "acoustic_rms_mv_rms",
+        "acoustic_rms_mv_p2p",
         "back_reflection_pct_mean", "back_reflection_pct_std",
         "back_reflection_pct_max", "back_reflection_pct_kurtosis",
-        "back_reflection_pct_rms",
+        "back_reflection_pct_skewness", "back_reflection_pct_rms",
+        "back_reflection_pct_p2p",
         "event_rate", "n_events",
     ]
 ]
