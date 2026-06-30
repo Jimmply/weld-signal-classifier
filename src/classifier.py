@@ -16,20 +16,18 @@ from xgboost import XGBClassifier
 logger = logging.getLogger(__name__)
 
 # Feature columns produced by WeldFleetSignalGenerator._extract_features
+# Time-domain (7 per channel) + frequency-domain (5 per channel) + event features = 38 total
+_SPECTRAL = [
+    "dominant_freq_hz", "spectral_centroid_hz", "spectral_entropy",
+    "low_band_power_pct", "high_band_power_pct",
+]
 FEAT_COLS = [
-    c for c in [
-        "photodiode_v_mean", "photodiode_v_std", "photodiode_v_max",
-        "photodiode_v_kurtosis", "photodiode_v_skewness", "photodiode_v_rms",
-        "photodiode_v_p2p",
-        "acoustic_rms_mv_mean", "acoustic_rms_mv_std", "acoustic_rms_mv_max",
-        "acoustic_rms_mv_kurtosis", "acoustic_rms_mv_skewness", "acoustic_rms_mv_rms",
-        "acoustic_rms_mv_p2p",
-        "back_reflection_pct_mean", "back_reflection_pct_std",
-        "back_reflection_pct_max", "back_reflection_pct_kurtosis",
-        "back_reflection_pct_skewness", "back_reflection_pct_rms",
-        "back_reflection_pct_p2p",
-        "event_rate", "n_events",
-    ]
+    c for c in (
+        [f"photodiode_v_{s}"       for s in ["mean","std","max","kurtosis","skewness","rms","p2p"] + _SPECTRAL]
+        + [f"acoustic_rms_mv_{s}"  for s in ["mean","std","max","kurtosis","skewness","rms","p2p"] + _SPECTRAL]
+        + [f"back_reflection_pct_{s}" for s in ["mean","std","max","kurtosis","skewness","rms","p2p"] + _SPECTRAL]
+        + ["event_rate", "n_events"]
+    )
 ]
 
 

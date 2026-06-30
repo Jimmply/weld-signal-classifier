@@ -35,6 +35,53 @@ SIGNAL_COLS    = ["photodiode_v", "acoustic_rms_mv", "back_reflection_pct"]
 SAMPLE_RATE_HZ = 10_000          # 10 kHz — typical for Nd:YAG in-process monitoring
 WELD_DURATION_S = 0.50           # 500 ms weld pass
 
+# Frequency band boundaries (Hz) chosen to match physical defect signatures:
+#   Low  0–500 Hz   — keyhole oscillation band (porosity precursor)
+#   Mid  500–2000 Hz — intermediate transient zone
+#   High 2000–5000 Hz — solidification cracking, spatter impulse content
+_BAND_LOW_HZ  = (10,   500)
+_BAND_HIGH_HZ = (2000, 5000)
+
+
+def _spectral_features(signal: np.ndarray, sample_rate: int) -> dict:
+    """
+    Compute frequency-domain features via real FFT.
+
+    Removing the DC component before FFT prevents the mean amplitude from
+    dominating the spectral centroid and band power calculations.
+    """
+    sig_ac   = signal - signal.mean()
+    fft_mag  = np.abs(np.fft.rfft(sig_ac))
+    freqs    = np.fft.rfftfreq(len(signal), d=1.0 / sample_rate)
+
+    total_power = fft_mag.sum() + 1e-12
+
+    # Dominant frequency — skip DC bin (index 0)
+    dominant_freq = float(freqs[1:][np.argmax(fft_mag[1:])]) if len(fft_mag) > 1 else 0.0
+
+    # Spectral centroid — power-weighted mean frequency
+    spectral_centroid = float((fft_mag * freqs).sum() / total_power)
+
+    # Spectral entropy — how spread or tonal the spectrum is
+    psd_norm = fft_mag / total_power
+    spectral_entropy = float(
+        -np.sum(psd_norm * np.log(psd_norm + 1e-12)) / np.log(max(len(psd_norm), 2))
+    )
+
+    # Band power fractions
+    low_mask  = (freqs >= _BAND_LOW_HZ[0])  & (freqs <= _BAND_LOW_HZ[1])
+    high_mask = (freqs >= _BAND_HIGH_HZ[0]) & (freqs <= _BAND_HIGH_HZ[1])
+    low_band_pct  = float(fft_mag[low_mask].sum()  / total_power)
+    high_band_pct = float(fft_mag[high_mask].sum() / total_power)
+
+    return {
+        "dominant_freq_hz":   dominant_freq,
+        "spectral_centroid_hz": spectral_centroid,
+        "spectral_entropy":   spectral_entropy,
+        "low_band_power_pct": low_band_pct,
+        "high_band_power_pct": high_band_pct,
+    }
+
 
 @dataclass
 class SignalConfig:
@@ -200,6 +247,7 @@ class WeldFleetSignalGenerator:
         feats = {"weld_id": ws.weld_id, "defect_type": ws.defect_type}
         for col in SIGNAL_COLS:
             s = d[col]
+            # Time domain
             feats[f"{col}_mean"]      = float(s.mean())
             feats[f"{col}_std"]       = float(s.std())
             feats[f"{col}_max"]       = float(s.max())
@@ -207,6 +255,10 @@ class WeldFleetSignalGenerator:
             feats[f"{col}_skewness"]  = float(s.skew())
             feats[f"{col}_rms"]       = float(np.sqrt((s**2).mean()))
             feats[f"{col}_p2p"]       = float(s.max() - s.min())
+            # Frequency domain
+            spec = _spectral_features(s.values, SAMPLE_RATE_HZ)
+            for k, v in spec.items():
+                feats[f"{col}_{k}"] = v
         feats["event_rate"]           = float(d["is_event"].mean())
         feats["n_events"]             = int(d["is_event"].sum())
         return feats
